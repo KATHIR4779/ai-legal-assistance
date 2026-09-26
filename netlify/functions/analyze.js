@@ -1,8 +1,7 @@
-require('dotenv').config();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const pdf = require('pdf-parse');
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import pdf from 'pdf-parse/lib/pdf-parse.js';
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
