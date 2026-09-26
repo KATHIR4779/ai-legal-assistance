@@ -29,7 +29,7 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null);
   const [fileName, setFileName] = useState<string>('');
-  const [sessionId, setSessionId] = useState<string>('');
+  const [documentContext, setDocumentContext] = useState<string>('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -45,27 +45,36 @@ function App() {
     setIsAnalyzing(true);
     setView('analyze');
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
+      // Read file as base64 for serverless-compatible upload
+      const fileData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileData, fileType: file.type }),
       });
-      
+
       const data = await response.json();
       if (data.analysis) {
         setAnalysisData(data.analysis);
-        setSessionId(data.sessionId);
+        setDocumentContext(data.documentContext || '');
       } else {
-        console.error("Failed to analyze:", data.error);
-        alert("Failed to analyze document.");
+        console.error('Failed to analyze:', data.error);
+        alert('Failed to analyze document.');
         setView('upload');
       }
     } catch (err) {
-      console.error("Error connecting to backend:", err);
-      alert("Error connecting to backend server. Make sure it is running on port 3001.");
+      console.error('Error connecting to backend:', err);
+      alert('Error connecting to backend server.');
       setView('upload');
     } finally {
       setIsAnalyzing(false);
@@ -74,33 +83,31 @@ function App() {
 
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
-    
+
     const userMessage = { role: 'user', content: inputText };
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
-    
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: sessionId || "no-session",
           message: userMessage.content,
-          history: messages
+          history: messages,
+          documentContext
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (data.reply) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
       } else {
-         setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error processing your request.' }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error processing your request.' }]);
       }
     } catch (err) {
-      console.error("Chat error:", err);
+      console.error('Chat error:', err);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Error connecting to backend server.' }]);
     }
   };
@@ -137,8 +144,8 @@ function App() {
           <button 
             className={`nav-item ${view === 'chat' ? 'active' : ''}`}
             onClick={() => setView('chat')}
-            disabled={!sessionId}
-            style={{ opacity: !sessionId ? 0.5 : 1, cursor: !sessionId ? 'not-allowed' : 'pointer' }}
+            disabled={!documentContext}
+            style={{ opacity: !documentContext ? 0.5 : 1, cursor: !documentContext ? 'not-allowed' : 'pointer' }}
           >
             <MessageSquare size={20} />
             Ask Questions
